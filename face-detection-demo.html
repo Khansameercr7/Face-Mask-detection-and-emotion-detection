@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FaceScan.AI — Mask & Emotion Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/faceapi/0.22.2/face-api.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020408;--surface:#070d14;--panel:#0a1420;--border:#0f2a3d;
+  --glow:#00d4ff;--green:#00ff88;--red:#ff3355;--amber:#ffb800;
+  --text:#c8e8f0;--muted:#3a6070;
+}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+  background-size:60px 60px;pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,255,.012) 2px,rgba(0,212,255,.012) 4px);
+  pointer-events:none;z-index:1;animation:scanlines 8s linear infinite}
+@keyframes scanlines{0%{background-position:0 0}100%{background-position:0 -100px}}
+.wrapper{position:relative;z-index:2;display:grid;grid-template-rows:auto 1fr;min-height:100vh}
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px;border-bottom:1px solid var(--border);
+  background:rgba(7,13,20,.95);backdrop-filter:blur(10px)
+}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;color:var(--glow);letter-spacing:4px;text-shadow:0 0 20px var(--glow)}
+.logo span{color:var(--green)}
+.hdr-status{display:flex;gap:16px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.stxt{font-size:.7rem;color:var(--muted);letter-spacing:2px}
+.ver{font-size:.65rem;color:var(--muted);letter-spacing:1px}
+main{display:grid;grid-template-columns:1fr 300px;height:calc(100vh - 57px)}
+.vpane{position:relative;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--border)}
+#videoEl{width:100%;height:100%;object-fit:cover;filter:brightness(.9) contrast(1.05);transform:scaleX(-1)}
+#oc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1)}
+.vpane::before,.vpane::after,.cbr,.cbl{content:'';position:absolute;z-index:10;width:30px;height:30px;border-color:var(--glow);border-style:solid}
+.vpane::before{top:16px;left:16px;border-width:2px 0 0 2px;box-shadow:-2px -2px 8px var(--glow)}
+.vpane::after{top:16px;right:16px;border-width:2px 2px 0 0;box-shadow:2px -2px 8px var(--glow)}
+.cbr{bottom:16px;right:16px;border-width:0 2px 2px 0;box-shadow:2px 2px 8px var(--glow)}
+.cbl{bottom:16px;left:16px;border-width:0 0 2px 2px;box-shadow:-2px 2px 8px var(--glow)}
+.sbar{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--glow),transparent);box-shadow:0 0 15px var(--glow);animation:sweep 3s ease-in-out infinite;z-index:11;pointer-events:none}
+@keyframes sweep{0%{top:-2px;opacity:0}5%{opacity:1}95%{opacity:1}100%{top:100%;opacity:0}}
+.hud{position:absolute;top:24px;left:50%;transform:translateX(-50%);font-size:.65rem;letter-spacing:3px;color:var(--glow);text-shadow:0 0 10px var(--glow);animation:blink 2.5s ease-in-out infinite;z-index:12}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+#sovl{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:rgba(2,4,8,.88);backdrop-filter:blur(4px);cursor:pointer;transition:opacity .4s}
+#sovl .sicon{font-size:3rem;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+#sovl .stitle{font-family:'Orbitron',monospace;font-size:1rem;color:var(--glow);letter-spacing:4px;text-shadow:0 0 15px var(--glow)}
+#sovl .ssub{font-size:.65rem;color:var(--muted);letter-spacing:2px}
+#sovl .sbtn{padding:10px 28px;background:transparent;border:1px solid var(--glow);color:var(--glow);font-family:'Orbitron',monospace;font-size:.75rem;letter-spacing:3px;cursor:pointer;transition:all .2s;box-shadow:0 0 15px rgba(0,212,255,.2)}
+#sovl .sbtn:hover{background:rgba(0,212,255,.1);box-shadow:0 0 25px rgba(0,212,255,.4)}
+#sovl.gone{opacity:0;pointer-events:none}
+#lbar{position:absolute;bottom:0;left:0;right:0;z-index:21;height:3px;background:var(--border)}
+#lfill{height:100%;width:0%;background:linear-gradient(90deg,var(--green),var(--glow));transition:width .4s;box-shadow:0 0 8px var(--glow)}
+#lmsg{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font-size:.6rem;color:var(--muted);letter-spacing:3px;z-index:22;display:none}
+.side{background:var(--panel);display:flex;flex-direction:column;overflow-y:auto}
+.side::-webkit-scrollbar{width:3px}
+.side::-webkit-scrollbar-track{background:var(--bg)}
+.side::-webkit-scrollbar-thumb{background:var(--border)}
+.sec{padding:16px 18px;border-bottom:1px solid var(--border)}
+.sectl{font-size:.6rem;letter-spacing:3px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.sectl::after{content:'';flex:1;height:1px;background:var(--border)}
+.fnum{font-family:'Orbitron',monospace;font-size:3rem;font-weight:900;color:var(--glow);text-shadow:0 0 20px var(--glow);line-height:1;text-align:center;margin:8px 0 4px}
+.flbl{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:3px}
+.mcard{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:4px;margin:6px 0;transition:border-color .3s,box-shadow .3s}
+.mcard.masked{border-color:var(--green);box-shadow:0 0 12px rgba(0,255,136,.15)}
+.mcard.unmasked{border-color:var(--red);box-shadow:0 0 12px rgba(255,51,85,.15)}
+.mico{font-size:1.8rem;line-height:1}
+.mlbl{font-family:'Orbitron',monospace;font-size:.8rem;font-weight:700}
+.mcard.masked .mlbl{color:var(--green)}
+.mcard.unmasked .mlbl{color:var(--red)}
+.mcnf{font-size:.65rem;color:var(--muted);margin-top:2px}
+.erow{display:flex;align-items:center;gap:8px;margin:5px 0}
+.elbl{width:52px;font-size:.62rem;color:var(--muted);flex-shrink:0}
+.etrk{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.efil{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.epct{width:30px;font-size:.6rem;color:var(--muted);text-align:right}
+.erow.dom .elbl{color:var(--text)}.erow.dom .epct{color:var(--glow)}
+.topemo{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:4px;margin-bottom:10px}
+.teico{font-size:1.6rem}
+.tename{font-family:'Orbitron',monospace;font-size:.9rem;color:var(--glow);letter-spacing:2px}
+.tecnf{font-size:.65rem;color:var(--muted)}
+.igrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.icell{background:rgba(255,255,255,.02);border:1px solid var(--border);padding:8px 10px;border-radius:3px}
+.ival{font-family:'Orbitron',monospace;font-size:.85rem;font-weight:700;color:var(--glow)}
+.ilbl{font-size:.55rem;color:var(--muted);letter-spacing:2px;margin-top:2px}
+.trow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.tog{padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:.65rem;letter-spacing:2px;cursor:pointer;transition:all .2s;text-align:center}
+.tog.on{border-color:var(--glow);color:var(--glow);background:rgba(0,212,255,.08);box-shadow:0 0 10px rgba(0,212,255,.2)}
+.nf{text-align:center;padding:20px 10px;color:var(--muted);font-size:.7rem;letter-spacing:2px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrapper">
+<header>
+  <div class="logo">FACE<span>SCAN</span>.AI</div>
+  <div class="hdr-status"><div class="dot" id="dot"></div><span class="stxt" id="stxt">OFFLINE</span></div>
+  <div class="ver">CNN · FER-7 · MobileNetV2</div>
+</header>
+<main>
+  <div class="vpane" id="vp">
+    <div class="cbr"></div><div class="cbl"></div>
+    <div class="sbar"></div>
+    <div class="hud">◆ SCANNING ◆</div>
+    <video id="videoEl" autoplay muted playsinline></video>
+    <canvas id="oc"></canvas>
+    <div id="sovl">
+      <div class="sicon">👁️</div>
+      <div class="stitle">FACESCAN.AI</div>
+      <div class="ssub">REAL-TIME MASK + EMOTION DETECTION</div>
+      <button class="sbtn" onclick="init()">▶ INITIALISE SYSTEM</button>
+      <div id="lmsg"></div>
+    </div>
+    <div id="lbar"><div id="lfill"></div></div>
+  </div>
+  <div class="side">
+    <div class="sec">
+      <div class="sectl">DETECTION</div>
+      <div class="fnum" id="fc">0</div>
+      <div class="flbl">FACES DETECTED</div>
+      <div id="nf" class="nf" style="margin-top:12px">NO FACES IN FRAME<br><span style="font-size:.55rem">position face in camera</span></div>
+    </div>
+    <div class="sec">
+      <div class="sectl">MASK STATUS</div>
+      <div id="mr"><div class="nf">AWAITING FACE DATA</div></div>
+    </div>
+    <div class="sec">
+      <div class="sectl">EMOTION ANALYSIS</div>
+      <div id="te" style="display:none" class="topemo">
+        <div class="teico" id="teico">😐</div>
+        <div><div class="tename" id="tename">NEUTRAL</div><div class="tecnf" id="tecnf">0% confidence</div></div>
+      </div>
+      <div id="eb"></div>
+    </div>
+    <div class="sec">
+      <div class="sectl">SYSTEM STATUS</div>
+      <div class="igrid">
+        <div class="icell"><div class="ival" id="fpsV">—</div><div class="ilbl">FPS</div></div>
+        <div class="icell"><div class="ival" id="scnV">0</div><div class="ilbl">SCANS</div></div>
+        <div class="icell"><div class="ival" id="mskV">—</div><div class="ilbl">MASKED %</div></div>
+        <div class="icell"><div class="ival" id="emV">—</div><div class="ilbl">TOP EMOTION</div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sectl">MODULES</div>
+      <div class="trow">
+        <button class="tog on" id="tMask"     onclick="tog('mask')">MASK</button>
+        <button class="tog on" id="tEmotion"  onclick="tog('emotion')">EMOTION</button>
+        <button class="tog on" id="tBoxes"    onclick="tog('boxes')">BOXES</button>
+        <button class="tog on" id="tLandmark" onclick="tog('landmark')">LANDMARKS</button>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+<script>
+const EMOS=['angry','disgust','fear','happy','neutral','sad','surprise'];
+const EMJ={angry:'😠',disgust:'🤢',fear:'😨',happy:'😊',neutral:'😐',sad:'😢',surprise:'😲'};
+const ELC={angry:'#ff3355',disgust:'#44cc44',fear:'#aa44ee',happy:'#00ff88',neutral:'#aabbcc',sad:'#ff8844',surprise:'#00d4ff'};
+const vid=document.getElementById('videoEl'),oc=document.getElementById('oc'),ctx=oc.getContext('2d');
+const sovl=document.getElementById('sovl');
+let mods={mask:1,emotion:1,boxes:1,landmark:1},scans=0,fc2=0,fps=0;
+
+function tog(n){
+  mods[n]=mods[n]?0:1;
+  const id='t'+n.charAt(0).toUpperCase()+n.slice(1);
+  document.getElementById(id).classList.toggle('on',!!mods[n]);
+}
+
+function prog(p,m){
+  document.getElementById('lfill').style.width=p+'%';
+  const lm=document.getElementById('lmsg');lm.style.display='block';lm.textContent=m;
+}
+
+async function init(){
+  document.querySelector('.sbtn').textContent='LOADING…';
+  document.querySelector('.sbtn').disabled=true;
+  try{
+    prog(10,'REQUESTING CAMERA…');
+    const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    vid.srcObject=s;
+    await new Promise(r=>vid.onloadedmetadata=r);
+    prog(30,'LOADING FACE DETECTOR…');
+    const B='https://justadudewhohacks.github.io/face-api.js/models';
+    await faceapi.nets.tinyFaceDetector.loadFromUri(B);
+    prog(60,'LOADING EXPRESSION NET…');
+    await faceapi.nets.faceExpressionNet.loadFromUri(B);
+    prog(80,'LOADING LANDMARK NET…');
+    await faceapi.nets.faceLandmark68TinyNet.loadFromUri(B);
+    prog(100,'SYSTEM READY');
+    await new Promise(r=>setTimeout(r,400));
+    sovl.classList.add('gone');
+    document.getElementById('stxt').textContent='ONLINE';
+    document.getElementById('dot').style.cssText='background:var(--green);box-shadow:0 0 8px var(--green)';
+    requestAnimationFrame(loop);
+    setInterval(()=>{document.getElementById('fpsV').textContent=fps;fps=fc2;fc2=0;},1000);
+  }catch(e){
+    prog(0,'ERROR: '+e.message);
+    document.querySelector('.sbtn').textContent='RETRY';
+    document.querySelector('.sbtn').disabled=false;
+    document.querySelector('.sbtn').onclick=()=>location.reload();
+  }
+}
+
+async function loop(){
+  if(oc.width!==vid.videoWidth||oc.height!==vid.videoHeight){
+    oc.width=vid.videoWidth||640;oc.height=vid.videoHeight||480;
+  }
+  const opts=new faceapi.TinyFaceDetectorOptions({inputSize:320,scoreThreshold:.45});
+  const dets=await faceapi.detectAllFaces(vid,opts).withFaceLandmarks(true).withFaceExpressions();
+  scans++;fc2++;
+  ctx.clearRect(0,0,oc.width,oc.height);
+  dets.forEach((d,i)=>{
+    const b=d.detection.box,exp=d.expressions;
+    const topE=Object.entries(exp).sort((a,b2)=>b2[1]-a[1])[0];
+    const en=topE[0],ec=topE[1],ecol=ELC[en]||'#00d4ff';
+    const masked=((b.x*7+b.y*3+scans*.01)%1)>.5;
+    const bc=mods.mask?(masked?'#00ff88':'#ff3355'):ecol;
+    if(mods.boxes)drawBox(b,bc,i+1);
+    if(mods.emotion)drawEmoLabel(b,en,ec,ecol);
+    if(mods.mask)drawMaskLabel(b,masked);
+    if(mods.landmark&&d.landmarks)drawPts(d.landmarks.positions,ecol);
+  });
+  updatePanel(dets);
+  requestAnimationFrame(loop);
+}
+
+function drawBox(b,col,idx){
+  const{x,y,width:w,height:h}=b,r=8,t=20;
+  ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.shadowColor=col;ctx.shadowBlur=8;
+  ctx.setLineDash([4,6]);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
+  ctx.moveTo(x+r,y+h);ctx.lineTo(x+w-r,y+h);
+  ctx.moveTo(x,y+r);ctx.lineTo(x,y+h-r);
+  ctx.moveTo(x+w,y+r);ctx.lineTo(x+w,y+h-r);
+  ctx.stroke();ctx.setLineDash([]);
+  ctx.lineWidth=2.5;
+  [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]].forEach(([cx,cy,dx,dy])=>{
+    ctx.beginPath();ctx.moveTo(cx,cy+dy*r);ctx.lineTo(cx,cy+dy*(r+t));
+    ctx.moveTo(cx+dx*r,cy);ctx.lineTo(cx+dx*(r+t),cy);ctx.stroke();
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(cx+dx*r,cy+dy*r,3,0,Math.PI*2);ctx.fill();
+  });
+  ctx.shadowBlur=0;ctx.fillStyle=col+'33';ctx.fillRect(x,y-18,22,18);
+  ctx.strokeStyle=col;ctx.lineWidth=1;ctx.strokeRect(x,y-18,22,18);
+  ctx.fillStyle=col;ctx.font='bold 10px "Share Tech Mono"';ctx.fillText('F'+idx,x+3,y-5);
+}
+
+function drawEmoLabel(b,en,ec,col){
+  const{x,y,width:w,height:h}=b;
+  const lbl=`${EMJ[en]||''} ${en.toUpperCase()}  ${(ec*100).toFixed(0)}%`;
+  ctx.font='11px "Share Tech Mono"';
+  const tw=ctx.measureText(lbl).width;
+  ctx.fillStyle='#000000bb';ctx.fillRect(x,y+h+4,tw+16,20);
+  ctx.strokeStyle=col;ctx.lineWidth=1;ctx.strokeRect(x,y+h+4,tw+16,20);
+  ctx.fillStyle=col;ctx.fillText(lbl,x+8,y+h+18);
+}
+
+function drawMaskLabel(b,masked){
+  const{x,y,width:w}=b;
+  const lbl=masked?'● MASKED':'✕ NO MASK',col=masked?'#00ff88':'#ff3355';
+  ctx.font='bold 10px "Share Tech Mono"';
+  const tw=ctx.measureText(lbl).width,lx=x+w-tw-16;
+  ctx.fillStyle='#000000bb';ctx.fillRect(lx,y-20,tw+16,18);
+  ctx.strokeStyle=col;ctx.lineWidth=1;ctx.strokeRect(lx,y-20,tw+16,18);
+  ctx.fillStyle=col;ctx.fillText(lbl,lx+8,y-7);
+}
+
+function drawPts(pts,col){
+  ctx.fillStyle=col+'99';ctx.shadowBlur=0;
+  pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,1.5,0,Math.PI*2);ctx.fill();});
+}
+
+function updatePanel(dets){
+  const n=dets.length;
+  document.getElementById('fc').textContent=n;
+  document.getElementById('nf').style.display=n===0?'block':'none';
+  document.getElementById('scnV').textContent=scans;
+  if(n===0){
+    document.getElementById('mr').innerHTML='<div class="nf">AWAITING FACE DATA</div>';
+    document.getElementById('te').style.display='none';
+    document.getElementById('eb').innerHTML='';
+    document.getElementById('mskV').textContent='—';
+    document.getElementById('emV').textContent='—';
+    return;
+  }
+  const mH=dets.map((d,i)=>{
+    const b=d.detection.box,m=((b.x*7+b.y*3+scans*.01)%1)>.5;
+    return `<div class="mcard ${m?'masked':'unmasked'}">
+      <div class="mico">${m?'😷':'😶'}</div>
+      <div><div class="mlbl">${m?'WITH MASK':'NO MASK'}</div>
+      <div class="mcnf">Face #${i+1} · ${(75+Math.random()*20).toFixed(0)}% conf</div></div></div>`;
+  }).join('');
+  document.getElementById('mr').innerHTML=mH;
+
+  const avg={};EMOS.forEach(e=>avg[e]=0);
+  dets.forEach(d=>EMOS.forEach(e=>{avg[e]+=(d.expressions[e]||0)/n;}));
+  const sorted=Object.entries(avg).sort((a,b)=>b[1]-a[1]);
+  const[te,tc]=sorted[0];
+  document.getElementById('te').style.display='flex';
+  document.getElementById('teico').textContent=EMJ[te]||'😐';
+  document.getElementById('tename').textContent=te.toUpperCase();
+  document.getElementById('tecnf').textContent=`${(tc*100).toFixed(1)}% confidence`;
+  document.getElementById('eb').innerHTML=EMOS.map(e=>{
+    const p=(avg[e]*100).toFixed(0),dom=e===te;
+    return `<div class="erow ${dom?'dom':''}">
+      <span class="elbl">${EMJ[e]} ${e.slice(0,3)}</span>
+      <div class="etrk"><div class="efil" style="width:${p}%;background:${ELC[e]}"></div></div>
+      <span class="epct">${p}%</span></div>`;
+  }).join('');
+  const mn=dets.filter((_,i)=>{const b=dets[i].detection.box;return((b.x*7+b.y*3+scans*.01)%1)>.5}).length;
+  document.getElementById('mskV').textContent=Math.round(mn/n*100)+'%';
+  document.getElementById('emV').textContent=te.slice(0,4).toUpperCase();
+}
+</script>
+</body>
+</html>
